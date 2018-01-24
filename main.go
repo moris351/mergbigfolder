@@ -1,40 +1,53 @@
 package mergbigfolder
 
-import(
-	"fmt"
+import (
+	"bytes"
 	"crypto/sha1"
-	"os"
-	"io"
+	"fmt"
+	humanize "github.com/dustin/go-humanize"
 	"math"
+	"os"
 	"path/filepath"
+	"sort"
+	"time"
 )
 
-type wfi struct{
-	path string
-	fi os.FileInfo
+type wfi struct {
+	path   string
+	fi     os.FileInfo
 	digest []byte
 }
 
-type Walker struct{
+type Walker struct {
 	wfiList []wfi
-	root string
+	root    string
+}
+type ByDigest []wfi
+
+func (w wfi) String() string {
+	return fmt.Sprintf("path:%s, digest:%x", w.path, w.digest)
 }
 
-func NewWalker(r string) *Walker{
-	return &Walker{root:r}
+func (b ByDigest) Len() int           { return len(b) }
+func (b ByDigest) Less(i, j int) bool { return bytes.Compare(b[i].digest, b[j].digest) == -1 }
+func (b ByDigest) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+
+func NewWalker(r string) *Walker {
+	return &Walker{root: r}
 }
 
-func(w *Walker)Walk()error{
-	return filepath.Walk(w.root,func(path string, info os.FileInfo, err error) error {
+func (w *Walker) Walk() error {
+	return filepath.Walk(w.root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			fmt.Println("filepath.Walk failed with err,", err)
 			return err
 		}
 
-		if info.IsDir() == false && info.Mode().IsRegular(){
-			if digest:=w.GetDigest(path); digest !=nil{
-				w.wfiList=append(w.wfiList,wfi{path,info,digest})
+		if info.IsDir() == false && info.Mode().IsRegular() {
+			if digest := w.GetDigest(path); digest != nil {
+				w.wfiList = append(w.wfiList, wfi{path, info, digest})
 			}
-			return nil			
+			return nil
 		}
 		return nil
 	})
@@ -43,8 +56,9 @@ func(w *Walker)Walk()error{
 // 8KB
 const filechunk = 8192
 
-func(w *Walker)GetDigest(path string)[]byte{
+func (w *Walker) GetDigest(path string) []byte {
 
+	start := time.Now()
 	// Open the file for reading
 	file, err := os.Open(path)
 	if err != nil {
@@ -66,6 +80,7 @@ func(w *Walker)GetDigest(path string)[]byte{
 
 	// Calculate the number of blocks
 	blocks := uint64(math.Ceil(float64(filesize) / float64(filechunk)))
+	fmt.Println("blocks=",blocks)
 
 	// Start hash
 	//hash := md5.New()
@@ -75,8 +90,8 @@ func(w *Walker)GetDigest(path string)[]byte{
 	for i := uint64(0); i < blocks; i++ {
 		// Calculate block size
 		blocksize := int(math.Min(filechunk, float64(filesize-int64(i*filechunk))))
-		if i%2 == 0 {
-			file.Seek(int64(blocksize),1)
+		if i%2 == 1 {
+			file.Seek(int64(blocksize), 1)
 			continue
 		}
 
@@ -86,21 +101,74 @@ func(w *Walker)GetDigest(path string)[]byte{
 		// Make a buffer
 		file.Read(buf)
 
-		
 		// Write to the buffer
-		io.WriteString(hash, string(buf))
+		hash.Write(buf)
 	}
 
 	// Output the results
-	//fmt.Printf("%x\n", hash.Sum(nil))
-	return hash.Sum(nil)
+	digest := hash.Sum(nil)
+	end := time.Now()
+
+	fmt.Printf("cost %s %x %s %s\n", end.Sub(start), digest, path, humanize.Bytes(uint64(info.Size())))
+	return digest
 }
 
+func FindDiff(src string, dst string) error {
+	fmt.Println("FindDiff call:")
+	srcw := NewWalker(src)
+	dstw := NewWalker(dst)
 
-func FindDiff(src string,dst string){
-	srcw:=NewWalker(src)
-	dstw:=NewWalker(dst)
+	if err := srcw.Walk(); err != nil {
+		return err
+	}
+	if err := dstw.Walk(); err != nil {
+		return err
+	}
 
-	srcw.Walk()
-	dstw.Walk()
+	sort.Sort(ByDigest(srcw.wfiList))
+	fmt.Printf("srcw: %v\n", srcw.wfiList)
+
+	sort.Sort(ByDigest(dstw.wfiList))
+	fmt.Printf("dstw: %v\n", dstw.wfiList)
+
+	srcl:=len(srcw.wfiList)
+	dstl := len(dstw.wfiList)
+	fmt.Println("dstl=", dstl)
+
+	//length:=math.Max(float64(srcl),float64(dstl))
+	printResult:=func(isSrc bool,w wfi){
+		if !isSrc{
+			fmt.Printf("......................")
+		}
+			
+		fmt.Printf("%s %s \n",w.path, humanize.Bytes(uint64(w.fi.Size())))
+	}
+	for i,j:=0,0;i<srcl || j<dstl;{
+		if i<srcl && j< dstl {
+			srcwfi:=srcw.wfiList[i]
+			dstwfi:=dstw.wfiList[j]
+			n:=bytes.Compare(srcwfi.digest,dstwfi.digest)
+			if n==0{
+				i++
+				j++
+			}else if n==-1{
+				printResult(true,srcwfi)
+				i++
+			}else if n==1{
+				printResult(false,dstwfi)
+				j++	
+			}
+			continue
+		}
+		if i<srcl{
+			printResult(true,srcw.wfiList[i])
+			i++
+		}
+		if j<dstl{
+			printResult(false,dstw.wfiList[j])
+			j++
+		}
+
+	}
+	return nil
 }

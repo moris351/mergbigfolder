@@ -17,7 +17,10 @@ func main() {
         return
     }
 
-	mg.FindDiff(os.Args[1],os.Args[2])
+	if err:=mg.FindDiff(os.Args[1],os.Args[2]);err!=nil{
+		fmt.Println("FindDiff err,", err)
+	}
+
 
 }
 
