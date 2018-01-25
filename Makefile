@@ -1,7 +1,7 @@
 # This is how we want to name the binary output
-base=${shell basename `pwd`}
+#base=${shell basename `pwd`}
 #base=`basename `pwd``
-OUTPUT=${base}.a
+#OUTPUT=${base}.a
 # These are the values we want to pass for Version and BuildTime
 GITTAG=`git describe --tags`
 BUILD_TIME=`date +%FT%T%z`
@@ -18,13 +18,8 @@ endif
 
 lDFLAGS=-ldflags "-X main.VerTag=${VERTAG} -X main.BuildTime=${BUILD_TIME}"
 all:
-	go build ${LDFLAGS} ./...; \
-	cd cmd ; \
-	rm cmd ; \
-	go build ${LDFLAGS} .; \
-	cd -; \
-	echo ${OUTPUT}
+	go build ${LDFLAGS} .; cd cmdx; rm cmdx; go build ${LDFLAGS} .; cd - >/dev/null
 run:
-	./cmd/cmd testdata/fa testdata/fb
+	./cmdx/cmdx testdata/fa testdata/fb
 clean:
 	go clean

@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	humanize "github.com/dustin/go-humanize"
 	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
+	humanize "github.com/dustin/go-humanize"
 )
 
 type wfi struct {
@@ -80,7 +80,7 @@ func (w *Walker) GetDigest(path string) []byte {
 
 	// Calculate the number of blocks
 	blocks := uint64(math.Ceil(float64(filesize) / float64(filechunk)))
-	fmt.Println("blocks=",blocks)
+	fmt.Println("blocks=", blocks)
 
 	// Start hash
 	//hash := md5.New()
@@ -113,8 +113,11 @@ func (w *Walker) GetDigest(path string) []byte {
 	return digest
 }
 
+var logger = newLogBot("debug")
 func FindDiff(src string, dst string) error {
-	fmt.Println("FindDiff call:")
+
+	logger.Debug("FindDiff call:")
+	//fmt.Println("FindDiff call:")
 	srcw := NewWalker(src)
 	dstw := NewWalker(dst)
 
@@ -131,41 +134,41 @@ func FindDiff(src string, dst string) error {
 	sort.Sort(ByDigest(dstw.wfiList))
 	fmt.Printf("dstw: %v\n", dstw.wfiList)
 
-	srcl:=len(srcw.wfiList)
+	srcl := len(srcw.wfiList)
 	dstl := len(dstw.wfiList)
 	fmt.Println("dstl=", dstl)
 
 	//length:=math.Max(float64(srcl),float64(dstl))
-	printResult:=func(isSrc bool,w wfi){
-		if !isSrc{
+	printResult := func(isSrc bool, w wfi) {
+		if !isSrc {
 			fmt.Printf("......................")
 		}
-			
-		fmt.Printf("%s %s \n",w.path, humanize.Bytes(uint64(w.fi.Size())))
+
+		fmt.Printf("%s %s \n", w.path, humanize.Bytes(uint64(w.fi.Size())))
 	}
-	for i,j:=0,0;i<srcl || j<dstl;{
-		if i<srcl && j< dstl {
-			srcwfi:=srcw.wfiList[i]
-			dstwfi:=dstw.wfiList[j]
-			n:=bytes.Compare(srcwfi.digest,dstwfi.digest)
-			if n==0{
+	for i, j := 0, 0; i < srcl || j < dstl; {
+		if i < srcl && j < dstl {
+			srcwfi := srcw.wfiList[i]
+			dstwfi := dstw.wfiList[j]
+			n := bytes.Compare(srcwfi.digest, dstwfi.digest)
+			if n == 0 {
 				i++
 				j++
-			}else if n==-1{
-				printResult(true,srcwfi)
+			} else if n == -1 {
+				printResult(true, srcwfi)
 				i++
-			}else if n==1{
-				printResult(false,dstwfi)
-				j++	
+			} else if n == 1 {
+				printResult(false, dstwfi)
+				j++
 			}
 			continue
 		}
-		if i<srcl{
-			printResult(true,srcw.wfiList[i])
+		if i < srcl {
+			printResult(true, srcw.wfiList[i])
 			i++
 		}
-		if j<dstl{
-			printResult(false,dstw.wfiList[j])
+		if j < dstl {
+			printResult(false, dstw.wfiList[j])
 			j++
 		}
 
